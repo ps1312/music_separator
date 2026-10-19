@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stem Splitter</title>
+<style>
+  :root {
+    --bg: #12131a; --panel: #1b1d27; --panel-2: #232634; --text: #e7e9f2;
+    --muted: #8b90a6; --accent: #7c5cff; --accent-2: #4dd6c1; --danger: #ff5c7c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: radial-gradient(1400px 700px at 50% -10%, #241f45, var(--bg));
+    color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; justify-content: center; padding: 40px 24px 56px;
+  }
+  main {
+    width: 100%; max-width: 1560px; display: grid; gap: 24px;
+    grid-template-columns: minmax(0, 1fr); align-items: start; align-content: start;
+  }
+  .hero { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -.02em; }
+  p.sub { color: var(--muted); margin: 0; }
+  .setup { display: flex; flex-direction: column; min-width: 0; }
+  .stage { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  @media (min-width: 920px) {
+    main { grid-template-columns: 380px minmax(0, 1fr); }
+  }
+  @media (min-width: 1320px) {
+    main { grid-template-columns: 380px minmax(0, 1fr) 340px; }
+    .stage { display: contents; }
+    .history { grid-column: 3; grid-row: 2; }
+  }
+  .dropzone {
+    border: 2px dashed #3a3f55; border-radius: 16px; padding: 40px 20px; text-align: center;
+    background: var(--panel); cursor: pointer; transition: .15s; position: relative;
+  }
+  .dropzone:hover, .dropzone.over { border-color: var(--accent); background: #201d33; }
+  .dropzone .big { font-size: 34px; margin-bottom: 8px; }
+  .dropzone .hint { color: var(--muted); font-size: 13px; }
+  .dropzone .file { color: var(--accent-2); font-weight: 600; margin-top: 8px; word-break: break-all; }
+  .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); margin: 20px 0; font-size: 13px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #2c2f40; }
+  input[type=url], select {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #2c2f40;
+    background: var(--panel-2); color: var(--text); font-size: 14px;
+  }
+  .options { margin-top: 24px; background: var(--panel); border-radius: 16px; padding: 18px; }
+  .options h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .stems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stem {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+    background: var(--panel-2); cursor: pointer; user-select: none; font-size: 14px;
+  }
+  .stem input { accent-color: var(--accent); width: 15px; height: 15px; }
+  .stem.disabled { opacity: .35; cursor: not-allowed; }
+  .row { display: flex; gap: 12px; margin-top: 14px; }
+  .row > div { flex: 1; }
+  label.small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  button {
+    width: 100%; margin-top: 22px; padding: 14px; border: 0; border-radius: 12px; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #9d7cff); color: white; font-size: 15px; font-weight: 600;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .progress { margin-top: 24px; display: none; }
+  .progress.show { display: block; }
+  .bar { height: 8px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+  .bar.indeterminate > div { width: 35%; animation: slide 1.2s infinite ease-in-out; }
+  @keyframes slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+  .status { display: flex; justify-content: space-between; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .result { background: var(--panel); border-radius: 16px; padding: 22px; min-height: 260px; min-width: 0; }
+  .result-content[hidden], .empty[hidden] { display: none; }
+  .empty {
+    min-height: 216px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 6px; color: var(--muted); padding: 20px;
+  }
+  .empty .icon { font-size: 38px; opacity: .55; margin-bottom: 4px; }
+  .empty h2 { margin: 0; font-size: 16px; color: var(--text); }
+  .empty p { margin: 0; font-size: 13px; max-width: 300px; }
+  .result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .result h2 { margin: 0; font-size: 18px; }
+  .bpm {
+    font-size: 12px; font-weight: 600; color: var(--accent-2);
+    background: rgba(77, 214, 193, .12); border: 1px solid rgba(77, 214, 193, .4);
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .result .kept { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .result a {
+    display: block; padding: 12px 16px; margin-bottom: 8px; border-radius: 10px; text-decoration: none;
+    background: var(--panel-2); color: var(--text); border: 1px solid #2c2f40;
+  }
+  .result a:hover { border-color: var(--accent); }
+  .result a span { color: var(--muted); font-size: 12px; display: block; }
+  .mixer { margin-top: 18px; border-top: 1px solid #2c2f40; padding-top: 16px; }
+  .player-note { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .transport { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .playbtn {
+    flex: 0 0 auto; width: 42px; height: 42px; margin: 0; border-radius: 50%; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #9d7cff); color: #fff; font-size: 15px; padding: 0;
+  }
+  .playbtn:disabled { opacity: .4; cursor: default; }
+  .transport input[type=range] { flex: 1; accent-color: var(--accent); }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; min-width: 36px; text-align: center; }
+  .track { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); margin-bottom: 6px; }
+  .track .tlabel { flex: 0 0 72px; font-size: 14px; }
+  .track.notkept .tlabel { color: var(--muted); }
+  .track .badge { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 6px; background: #33384d; color: var(--muted); flex: 0 0 auto; }
+  .mute, .solo { flex: 0 0 auto; width: 34px; height: 26px; margin: 0; border-radius: 7px; border: 1px solid #3a3f55; background: transparent; color: var(--text); cursor: pointer; font-size: 11px; padding: 0; }
+  .mute.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .solo.on { background: var(--accent-2); border-color: var(--accent-2); color: #0d1117; }
+  .track.dimmed { opacity: .4; }
+  .track input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent-2); }
+  .track input[type=range]:disabled { opacity: .4; }
+  .error { color: var(--danger); margin-top: 16px; white-space: pre-wrap; display: none; }
+  .error.show { display: block; }
+  .history { background: var(--panel); border-radius: 16px; padding: 18px; min-width: 0; }
+  .history h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .history-list { max-height: 420px; overflow-y: auto; }
+  .empty-note { color: var(--muted); font-size: 13px; padding: 6px 2px 10px; }
+  @media (min-width: 1320px) {
+    .history-list { max-height: calc(100vh - 220px); }
+  }
+  .history-item {
+    width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    margin: 0 0 6px; padding: 10px 12px; border: 1px solid #2c2f40; border-radius: 10px;
+    background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  }
+  .history-item:hover, .history-item.active { border-color: var(--accent); }
+  .history-item .hname { font-weight: 600; font-size: 14px; }
+  .history-item .hmeta { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <h1>Stem Splitter</h1>
+    <p class="sub">Drop a song or paste a YouTube link, then choose what to keep.</p>
+  </header>
+
+  <section class="setup">
+  <div class="dropzone" id="dropzone">
+    <div class="big">&#9835;</div>
+    <div>Drag &amp; drop an audio or video file</div>
+    <div class="hint">or click to browse</div>
+    <div class="file" id="filename"></div>
+    <input type="file" id="fileinput" accept="audio/*,video/*" hidden>
+  </div>
+
+  <div class="divider">or a YouTube URL</div>
+  <input type="url" id="url" placeholder="https://youtu.be/...">
+
+  <div class="options">
+    <h2>Stems to keep</h2>
+    <div class="stems" id="stemgrid"></div>
+    <div class="row">
+      <div>
+        <label class="small">Model</label>
+        <select id="model">
+          <option value="htdemucs_6s">6 stems (default)</option>
+          <option value="htdemucs">4 stems (fast)</option>
+        </select>
+      </div>
+      <div>
+        <label class="small">Output format</label>
+        <select id="format">
+          <option value="mp3">MP3 (320k)</option>
+          <option value="wav">WAV</option>
+          <option value="flac">FLAC</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <button id="go" disabled>Separate</button>
+
+  <div class="progress" id="progress">
+    <div class="bar" id="bar"><div id="barfill"></div></div>
+    <div class="status"><span id="stagetext">Starting…</span><span id="timer">0s</span></div>
+  </div>
+
+  <div class="error" id="error"></div>
+  </section>
+
+  <div class="stage">
+  <section class="result" id="result">
+    <div class="empty" id="result-empty">
+      <div class="icon">&#9835;</div>
+      <h2>Nothing separated yet</h2>
+      <p>Drop a track or paste a URL, then choose your stems. The result and stem player will appear here.</p>
+    </div>
+    <div class="result-content" id="result-content" hidden>
+    <div class="result-head">
+      <h2 id="resultname"></h2>
+      <span class="bpm" id="resultbpm" hidden></span>
+    </div>
+    <div class="kept" id="resultkept"></div>
+    <a id="dl-backing" href="#" download>Backing track <span id="dl-backing-ext"></span></a>
+    <a id="dl-stems" href="#" download>All separated stems <span>ZIP of every stem, so you can remix in a DAW</span></a>
+
+    <div class="mixer">
+      <div class="player-note" id="player-note">Loading stems…</div>
+      <div class="transport">
+        <button class="playbtn" id="playbtn" disabled>&#9654;</button>
+        <span class="time" id="curtime">0:00</span>
+        <input type="range" id="seek" min="0" max="0" step="0.01" value="0">
+        <span class="time" id="durtime">0:00</span>
+      </div>
+      <div id="tracks"></div>
+    </div>
+    </div>
+  </section>
+
+  <aside class="history" id="history">
+    <h2>Recent tracks</h2>
+    <div class="history-list" id="historylist"></div>
+  </aside>
+  </div>
+</main>
+
+<script>
+  const MODELS = {{ models|tojson }};
+  const LABELS = {{ labels|tojson }};
+  const dropzone = document.getElementById('dropzone');
+  const fileinput = document.getElementById('fileinput');
+  const filename = document.getElementById('filename');
+  const urlInput = document.getElementById('url');
+  const modelSelect = document.getElementById('model');
+  const stemGrid = document.getElementById('stemgrid');
+  const goBtn = document.getElementById('go');
+  let selectedFile = null;
+  let timerHandle = null;
+  let startTime = 0;
+
+  function renderStems() {
+    const stems = MODELS[modelSelect.value];
+    stemGrid.innerHTML = '';
+    stems.forEach(name => {
+      const label = document.createElement('label');
+      label.className = 'stem';
+      label.innerHTML = `<input type="checkbox" value="${name}" ${name === 'guitar' ? '' : 'checked'}> ${LABELS[name] || name}`;
+      stemGrid.appendChild(label);
+    });
+  }
+
+  function refreshButton() {
+    goBtn.disabled = !(selectedFile || urlInput.value.trim());
+  }
+
+  dropzone.addEventListener('click', () => fileinput.click());
+  fileinput.addEventListener('change', () => setFile(fileinput.files[0]));
+  ['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
+    e.preventDefault(); dropzone.classList.add('over');
+  }));
+  ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+    e.preventDefault(); dropzone.classList.remove('over');
+  }));
+  dropzone.addEventListener('drop', e => {
+    if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+  });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  function setFile(file) {
+    if (!file) return;
+    selectedFile = file;
+    filename.textContent = file.name;
+    refreshButton();
+  }
+
+  urlInput.addEventListener('input', () => { selectedFile = null; filename.textContent = ''; refreshButton(); });
+  modelSelect.addEventListener('change', renderStems);
+
+  goBtn.addEventListener('click', start);
+
+  function setStageText(text) {
+    document.getElementById('stagetext').textContent = text;
+  }
+
+  function startTimer() {
+    startTime = Date.now();
+    clearInterval(timerHandle);
+    timerHandle = setInterval(() => {
+      document.getElementById('timer').textContent = Math.round((Date.now() - startTime) / 1000) + 's';
+    }, 500);
+  }
+
+  async function start() {
+    const body = new FormData();
+    body.append('model', modelSelect.value);
+    body.append('format', document.getElementById('format').value);
+    document.querySelectorAll('#stemgrid input:checked').forEach(c => body.append('keep', c.value));
+    if (selectedFile) body.append('file', selectedFile);
+    else body.append('url', urlInput.value.trim());
+
+    goBtn.disabled = true;
+    playerReset();
+    document.getElementById('result-content').hidden = true;
+    const empty = document.getElementById('result-empty');
+    empty.hidden = false;
+    empty.querySelector('h2').textContent = 'Separating your track…';
+    empty.querySelector('p').textContent = 'The result and stem player will appear here when it is ready.';
+    document.getElementById('error').classList.remove('show');
+    const progress = document.getElementById('progress');
+    progress.classList.add('show');
+    const bar = document.getElementById('bar');
+    bar.classList.add('indeterminate');
+    const fill = document.getElementById('barfill');
+    fill.style.width = '0%';
+    setStageText('Uploading…');
+    document.getElementById('timer').textContent = '0s';
+
+    let jobId;
+    try {
+      const res = await fetch('/jobs', { method: 'POST', body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to start');
+      jobId = data.id;
+    } catch (err) {
+      return fail(err.message);
+    }
+
+    startTimer();
+    const source = new EventSource(`/jobs/${jobId}/events`);
+    source.onmessage = ev => {
+      const msg = JSON.parse(ev.data);
+      if (msg.percent != null && msg.stage === 'separate') {
+        bar.classList.remove('indeterminate');
+        fill.style.width = msg.percent + '%';
+        setStageText(`Separating… ${msg.percent}%`);
+      } else if (msg.stage === 'download') {
+        bar.classList.add('indeterminate');
+        setStageText('Downloading audio…');
+      } else if (msg.stage === 'mix') {
+        bar.classList.add('indeterminate');
+        setStageText('Mixing selected stems…');
+      }
+      if (msg.status === 'done') {
+        source.close();
+        clearInterval(timerHandle);
+        bar.classList.remove('indeterminate');
+        fill.style.width = '100%';
+        setStageText('Done');
+        showResult(msg.result);
+        loadHistory();
+      } else if (msg.status === 'error') {
+        source.close();
+        fail(msg.detail || 'Something went wrong');
+      }
+    };
+    source.onerror = () => { source.close(); fail('Lost connection to the server.'); };
+  }
+
+  function showResult(result) {
+    document.getElementById('resultname').textContent = result.name;
+    document.getElementById('resultkept').textContent = 'Backing track keeps: ' + result.selected.map(s => LABELS[s] || s).join(', ');
+    setBpm(result.bpm);
+    const backingLink = document.getElementById('dl-backing');
+    if (result.backing) {
+      backingLink.style.display = 'block';
+      backingLink.href = result.backing;
+      document.getElementById('dl-backing-ext').textContent = 'Download the mixed track';
+    } else {
+      backingLink.style.display = 'none';
+    }
+    const stemsLink = document.getElementById('dl-stems');
+    if (result.stems) { stemsLink.style.display = 'block'; stemsLink.href = result.stems; }
+    else stemsLink.style.display = 'none';
+    document.getElementById('result-empty').hidden = true;
+    document.getElementById('result-content').hidden = false;
+    document.getElementById('progress').classList.remove('show');
+    goBtn.disabled = false;
+    setupPlayer(result);
+  }
+
+  /* ---------- multitrack stem player ---------- */
+
+  const player = {
+    ctx: null, master: null, buffers: [], gains: [], sources: [],
+    muted: [], volumes: [], solo: null, playing: false, startCtx: 0, offset: 0, duration: 0,
+    raf: 0, loadToken: 0,
+  };
+
+  function fmtTime(value) {
+    value = Math.max(0, Math.floor(value));
+    return Math.floor(value / 60) + ':' + String(value % 60).padStart(2, '0');
+  }
+
+  function playerStopSources() {
+    player.sources.forEach(src => { try { src.stop(); } catch (e) {} src.disconnect(); });
+    player.sources = [];
+    player.playing = false;
+  }
+
+  function playerReset() {
+    player.loadToken++;
+    playerStopSources();
+    cancelAnimationFrame(player.raf);
+    if (player.ctx) player.ctx.close().catch(() => {});
+    player.ctx = null; player.master = null;
+    player.buffers = []; player.gains = []; player.muted = []; player.volumes = [];
+    player.solo = null;
+    player.offset = 0; player.duration = 0;
+    const tracks = document.getElementById('tracks');
+    tracks.innerHTML = '';
+    document.getElementById('playbtn').disabled = true;
+    document.getElementById('playbtn').innerHTML = '&#9654;';
+    document.getElementById('seek').max = 0;
+    document.getElementById('seek').value = 0;
+    document.getElementById('curtime').textContent = '0:00';
+    document.getElementById('durtime').textContent = '0:00';
+    document.getElementById('player-note').textContent = 'Loading stems…';
+  }
+
+  async function setupPlayer(result) {
+    playerReset();
+    const token = player.loadToken;
+    const tracks = result.tracks || [];
+    const note = document.getElementById('player-note');
+    if (!tracks.length) {
+      note.textContent = 'No stems available.';
+      return;
+    }
+
+    const grid = document.getElementById('tracks');
+    const rows = tracks.map(t => {
+      const row = document.createElement('div');
+      row.className = 'track' + (t.kept ? '' : ' notkept');
+      row.innerHTML = `<span class="tlabel">${t.label}</span>
+        <button class="mute" title="Mute ${t.label}">M</button>
+        <button class="solo" title="Play only ${t.label}">S</button>
+        <input type="range" min="0" max="1" step="0.01" value="1" title="${t.label} volume">
+        ${t.kept ? '<span class="badge">kept</span>' : ''}`;
+      grid.appendChild(row);
+      return row;
+    });
+
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    player.ctx = ctx;
+    player.master = ctx.createGain();
+    player.master.connect(ctx.destination);
+
+    let buffers;
+    try {
+      buffers = await Promise.all(tracks.map(t =>
+        fetch(t.url).then(r => {
+          if (!r.ok) throw new Error('fetch failed');
+          return r.arrayBuffer();
+        }).then(data => ctx.decodeAudioData(data))
+      ));
+    } catch (err) {
+      if (token !== player.loadToken) return;
+      note.textContent = 'Could not load the stems for playback. Downloads still work.';
+      return;
+    }
+    if (token !== player.loadToken) return;
+
+    player.buffers = buffers;
+    player.duration = Math.max(...buffers.map(b => b.duration));
+
+    tracks.forEach((track, i) => {
+      const gain = ctx.createGain();
+      gain.connect(player.master);
+      player.gains[i] = gain;
+      player.muted[i] = !track.kept;
+      player.volumes[i] = 1;
+      gain.gain.value = player.muted[i] ? 0 : 1;
+
+      const row = rows[i];
+      const muteBtn = row.querySelector('.mute');
+      const soloBtn = row.querySelector('.solo');
+      const volume = row.querySelector('input[type=range]');
+      muteBtn.classList.toggle('on', player.muted[i]);
+      muteBtn.addEventListener('click', () => toggleMute(i));
+      soloBtn.addEventListener('click', () => toggleSolo(i));
+      volume.addEventListener('input', e => setVolume(i, parseFloat(e.target.value)));
+    });
+
+    note.textContent = 'Play all stems together, mute or solo each one. Unkept stems start muted.';
+    document.getElementById('playbtn').disabled = false;
+    document.getElementById('seek').max = player.duration;
+    document.getElementById('durtime').textContent = fmtTime(player.duration);
+  }
+
+  function applyGain(i) {
+    const gain = player.gains[i];
+    if (!gain || !player.ctx) return;
+    const audible = player.solo !== null ? player.solo === i : !player.muted[i];
+    gain.gain.setTargetAtTime(audible ? player.volumes[i] : 0, player.ctx.currentTime, 0.01);
+  }
+
+  function refreshTrackVisuals() {
+    const rows = document.getElementById('tracks').children;
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].querySelector('.mute').classList.toggle('on', player.muted[i]);
+      rows[i].querySelector('.solo').classList.toggle('on', player.solo === i);
+      rows[i].classList.toggle('dimmed', player.solo !== null && player.solo !== i);
+    }
+  }
+
+  function toggleMute(i) {
+    player.solo = null;
+    player.muted[i] = !player.muted[i];
+    player.gains.forEach((_, index) => applyGain(index));
+    refreshTrackVisuals();
+  }
+
+  function toggleSolo(i) {
+    player.solo = player.solo === i ? null : i;
+    player.gains.forEach((_, index) => applyGain(index));
+    refreshTrackVisuals();
+  }
+
+  function setVolume(i, value) {
+    player.volumes[i] = value;
+    applyGain(i);
+  }
+
+  function playerPlay() {
+    if (!player.ctx || !player.buffers.length) return;
+    player.ctx.resume();
+    playerStopSources();
+    const offset = player.offset >= player.duration - 0.05 ? 0 : player.offset;
+    const when = player.ctx.currentTime + 0.06;
+    player.buffers.forEach((buffer, i) => {
+      const source = player.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(player.gains[i]);
+      source.start(when, offset);
+      player.sources.push(source);
+    });
+    player.startCtx = when;
+    player.offset = offset;
+    player.playing = true;
+    document.getElementById('playbtn').innerHTML = '&#10074;&#10074;';
+    playerTick();
+  }
+
+  function playerPause() {
+    if (!player.playing) return;
+    player.offset = Math.min(player.duration, player.offset + (player.ctx.currentTime - player.startCtx));
+    playerStopSources();
+    cancelAnimationFrame(player.raf);
+    document.getElementById('playbtn').innerHTML = '&#9654;';
+    updateTime();
+  }
+
+  function updateTime() {
+    const current = player.playing
+      ? player.offset + Math.max(0, player.ctx.currentTime - player.startCtx)
+      : player.offset;
+    document.getElementById('curtime').textContent = fmtTime(current);
+    document.getElementById('seek').value = current;
+  }
+
+  function playerTick() {
+    if (!player.playing) return;
+    const current = player.offset + Math.max(0, player.ctx.currentTime - player.startCtx);
+    if (current >= player.duration) {
+      playerStopSources();
+      player.offset = 0;
+      document.getElementById('playbtn').innerHTML = '&#9654;';
+      updateTime();
+      return;
+    }
+    updateTime();
+    player.raf = requestAnimationFrame(playerTick);
+  }
+
+  document.getElementById('playbtn').addEventListener('click', () => {
+    if (player.playing) playerPause(); else playerPlay();
+  });
+
+  document.getElementById('seek').addEventListener('input', e => {
+    player.offset = parseFloat(e.target.value) || 0;
+    if (player.playing) playerPlay(); else updateTime();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!player.buffers.length) return;
+    e.preventDefault();
+    if (player.playing) playerPause(); else playerPlay();
+  });
+
+  function setBpm(value) {
+    const badge = document.getElementById('resultbpm');
+    if (value) {
+      badge.hidden = false;
+      badge.textContent = Math.round(value) + ' BPM';
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  /* ---------- history ---------- */
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('/history');
+      const data = await res.json();
+      renderHistory(data.entries || []);
+    } catch (err) {
+      /* history is optional */
+    }
+  }
+
+  function historyMeta(entry) {
+    const date = new Date(entry.created * 1000);
+    const when = date.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+    const kept = entry.selected.map(s => LABELS[s] || s).join(', ') || 'none';
+    const bpm = entry.bpm ? ` \u00b7 ${Math.round(entry.bpm)} BPM` : '';
+    return `${when} \u00b7 ${kept}${bpm}`;
+  }
+
+  function renderHistory(entries) {
+    const list = document.getElementById('historylist');
+    list.innerHTML = '';
+    if (!entries.length) {
+      list.innerHTML = '<div class="empty-note">Your separated tracks will appear here.</div>';
+      return;
+    }
+    entries.forEach(entry => {
+      const item = document.createElement('button');
+      item.className = 'history-item';
+      item.innerHTML = `<span class="hname">${escapeHtml(entry.name)}</span>
+        <span class="hmeta">${escapeHtml(historyMeta(entry))}</span>`;
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        showResult(entry);
+        document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (!entry.bpm) detectHistoryBpm(entry, item);
+      });
+      list.appendChild(item);
+    });
+  }
+
+  async function detectHistoryBpm(entry, item) {
+    try {
+      const res = await fetch(`/history/${encodeURIComponent(entry.id)}/bpm`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.bpm) return;
+      entry.bpm = data.bpm;
+      item.querySelector('.hmeta').textContent = historyMeta(entry);
+      setBpm(data.bpm);
+    } catch (err) {
+      /* tempo detection is best-effort */
+    }
+  }
+
+  function fail(message) {
+    clearInterval(timerHandle);
+    document.getElementById('progress').classList.remove('show');
+    const error = document.getElementById('error');
+    error.textContent = message;
+    error.classList.add('show');
+    goBtn.disabled = false;
+  }
+
+  renderStems();
+  refreshButton();
+  loadHistory();
+  urlInput.focus();
+</script>
+</body>
+</html>
