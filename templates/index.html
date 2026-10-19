@@ -47,14 +47,6 @@
     background: var(--panel-2); color: var(--text); font-size: 14px;
   }
   .options { margin-top: 24px; background: var(--panel); border-radius: 16px; padding: 18px; }
-  .options h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
-  .stems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .stem {
-    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
-    background: var(--panel-2); cursor: pointer; user-select: none; font-size: 14px;
-  }
-  .stem input { accent-color: var(--accent); width: 15px; height: 15px; }
-  .stem.disabled { opacity: .35; cursor: not-allowed; }
   .row { display: flex; gap: 12px; margin-top: 14px; }
   .row > div { flex: 1; }
   label.small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
@@ -136,7 +128,7 @@
 <main>
   <header class="hero">
     <h1>Stem Splitter</h1>
-    <p class="sub">Drop a song or paste a YouTube link, then choose what to keep.</p>
+    <p class="sub">Drop a song or paste a YouTube link to split it into stems.</p>
   </header>
 
   <section class="setup">
@@ -152,8 +144,6 @@
   <input type="url" id="url" placeholder="https://youtu.be/...">
 
   <div class="options">
-    <h2>Stems to keep</h2>
-    <div class="stems" id="stemgrid"></div>
     <div class="row">
       <div>
         <label class="small">Model</label>
@@ -188,7 +178,7 @@
     <div class="empty" id="result-empty">
       <div class="icon">&#9835;</div>
       <h2>Nothing separated yet</h2>
-      <p>Drop a track or paste a URL, then choose your stems. The result and stem player will appear here.</p>
+      <p>Drop a track or paste a URL. The result and stem player will appear here.</p>
     </div>
     <div class="result-content" id="result-content" hidden>
     <div class="result-head">
@@ -220,29 +210,16 @@
 </main>
 
 <script>
-  const MODELS = {{ models|tojson }};
   const LABELS = {{ labels|tojson }};
   const dropzone = document.getElementById('dropzone');
   const fileinput = document.getElementById('fileinput');
   const filename = document.getElementById('filename');
   const urlInput = document.getElementById('url');
   const modelSelect = document.getElementById('model');
-  const stemGrid = document.getElementById('stemgrid');
   const goBtn = document.getElementById('go');
   let selectedFile = null;
   let timerHandle = null;
   let startTime = 0;
-
-  function renderStems() {
-    const stems = MODELS[modelSelect.value];
-    stemGrid.innerHTML = '';
-    stems.forEach(name => {
-      const label = document.createElement('label');
-      label.className = 'stem';
-      label.innerHTML = `<input type="checkbox" value="${name}" ${name === 'guitar' ? '' : 'checked'}> ${LABELS[name] || name}`;
-      stemGrid.appendChild(label);
-    });
-  }
 
   function refreshButton() {
     goBtn.disabled = !(selectedFile || urlInput.value.trim());
@@ -270,7 +247,6 @@
   }
 
   urlInput.addEventListener('input', () => { selectedFile = null; filename.textContent = ''; refreshButton(); });
-  modelSelect.addEventListener('change', renderStems);
 
   goBtn.addEventListener('click', start);
 
@@ -290,7 +266,6 @@
     const body = new FormData();
     body.append('model', modelSelect.value);
     body.append('format', document.getElementById('format').value);
-    document.querySelectorAll('#stemgrid input:checked').forEach(c => body.append('keep', c.value));
     if (selectedFile) body.append('file', selectedFile);
     else body.append('url', urlInput.value.trim());
 
@@ -669,7 +644,6 @@
     goBtn.disabled = false;
   }
 
-  renderStems();
   refreshButton();
   loadHistory();
   urlInput.focus();

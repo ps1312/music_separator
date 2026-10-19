@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local web app: drag a file (or paste a YouTube URL), pick stems, download the backing track."""
+"""Local web app: drag a file (or paste a YouTube URL), split it into stems, download the results."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def run_job(job: Job, source: str, keep, model: str, fmt: str, work: Path) -> No
 
 @app.get("/")
 def index():
-    return render_template("index.html", models=core.MODELS, labels=core.STEM_LABELS)
+    return render_template("index.html", labels=core.STEM_LABELS)
 
 
 def _ordered_stems(stems: dict) -> dict:
@@ -373,5 +373,7 @@ def download_stems(job_id: str):
 
 
 if __name__ == "__main__":
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.jinja_env.auto_reload = True
     print("\033[1;36m::\033[0m Open http://127.0.0.1:8756 in your browser")
-    app.run(host="127.0.0.1", port=8756, threaded=True)
+    app.run(host="127.0.0.1", port=8756, threaded=True, use_reloader=True)
