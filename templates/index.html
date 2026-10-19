@@ -78,13 +78,13 @@
     background: rgba(77, 214, 193, .12); border: 1px solid rgba(77, 214, 193, .4);
     padding: 3px 9px; border-radius: 999px; white-space: nowrap;
   }
-  .result .kept { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
-  .result a {
-    display: block; padding: 12px 16px; margin-bottom: 8px; border-radius: 10px; text-decoration: none;
-    background: var(--panel-2); color: var(--text); border: 1px solid #2c2f40;
+  .result .kept { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .exportbtn {
+    width: 100%; margin: 0 0 4px; padding: 12px 16px; border-radius: 10px; cursor: pointer;
+    border: 1px solid rgba(77, 214, 193, .45); background: rgba(77, 214, 193, .14);
+    color: var(--accent-2); font-size: 14px; font-weight: 600;
   }
-  .result a:hover { border-color: var(--accent); }
-  .result a span { color: var(--muted); font-size: 12px; display: block; }
+  .exportbtn:hover:not(:disabled) { background: rgba(77, 214, 193, .24); }
   .mixer { margin-top: 18px; border-top: 1px solid #2c2f40; padding-top: 16px; }
   .player-note { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
   .transport { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
@@ -98,13 +98,16 @@
   .track { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); margin-bottom: 6px; }
   .track .tlabel { flex: 0 0 72px; font-size: 14px; }
   .track.notkept .tlabel { color: var(--muted); }
-  .track .badge { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 6px; background: #33384d; color: var(--muted); flex: 0 0 auto; }
   .mute, .solo { flex: 0 0 auto; width: 34px; height: 26px; margin: 0; border-radius: 7px; border: 1px solid #3a3f55; background: transparent; color: var(--text); cursor: pointer; font-size: 11px; padding: 0; }
   .mute.on { background: var(--danger); border-color: var(--danger); color: #fff; }
   .solo.on { background: var(--accent-2); border-color: var(--accent-2); color: #0d1117; }
   .track.dimmed { opacity: .4; }
   .track input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent-2); }
   .track input[type=range]:disabled { opacity: .4; }
+  .fader { display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .fader.vol { flex: 1 1 auto; }
+  .fader.pan { flex: 0 1 140px; }
+  .fader .ptag { font-size: 10px; color: var(--muted); }
   .error { color: var(--danger); margin-top: 16px; white-space: pre-wrap; display: none; }
   .error.show { display: block; }
   .history { background: var(--panel); border-radius: 16px; padding: 18px; min-width: 0; }
@@ -186,8 +189,7 @@
       <span class="bpm" id="resultbpm" hidden></span>
     </div>
     <div class="kept" id="resultkept"></div>
-    <a id="dl-backing" href="#" download>Backing track <span id="dl-backing-ext"></span></a>
-    <a id="dl-stems" href="#" download>All separated stems <span>ZIP of every stem, so you can remix in a DAW</span></a>
+    <button class="exportbtn" id="exportmix" disabled>Export current mix</button>
 
     <div class="mixer">
       <div class="player-note" id="player-note">Loading stems…</div>
@@ -217,6 +219,7 @@
   const urlInput = document.getElementById('url');
   const modelSelect = document.getElementById('model');
   const goBtn = document.getElementById('go');
+  const exportBtn = document.getElementById('exportmix');
   let selectedFile = null;
   let timerHandle = null;
   let startTime = 0;
@@ -331,17 +334,6 @@
     document.getElementById('resultname').textContent = result.name;
     document.getElementById('resultkept').textContent = 'Backing track keeps: ' + result.selected.map(s => LABELS[s] || s).join(', ');
     setBpm(result.bpm);
-    const backingLink = document.getElementById('dl-backing');
-    if (result.backing) {
-      backingLink.style.display = 'block';
-      backingLink.href = result.backing;
-      document.getElementById('dl-backing-ext').textContent = 'Download the mixed track';
-    } else {
-      backingLink.style.display = 'none';
-    }
-    const stemsLink = document.getElementById('dl-stems');
-    if (result.stems) { stemsLink.style.display = 'block'; stemsLink.href = result.stems; }
-    else stemsLink.style.display = 'none';
     document.getElementById('result-empty').hidden = true;
     document.getElementById('result-content').hidden = false;
     document.getElementById('progress').classList.remove('show');
@@ -352,9 +344,9 @@
   /* ---------- multitrack stem player ---------- */
 
   const player = {
-    ctx: null, master: null, buffers: [], gains: [], sources: [],
-    muted: [], volumes: [], solo: null, playing: false, startCtx: 0, offset: 0, duration: 0,
-    raf: 0, loadToken: 0,
+    ctx: null, master: null, buffers: [], gains: [], panners: [], sources: [],
+    muted: [], volumes: [], pans: [], solo: new Set(), playing: false, startCtx: 0, offset: 0, duration: 0,
+    name: '', raf: 0, loadToken: 0,
   };
 
   function fmtTime(value) {
@@ -374,11 +366,14 @@
     cancelAnimationFrame(player.raf);
     if (player.ctx) player.ctx.close().catch(() => {});
     player.ctx = null; player.master = null;
-    player.buffers = []; player.gains = []; player.muted = []; player.volumes = [];
-    player.solo = null;
-    player.offset = 0; player.duration = 0;
+    player.buffers = []; player.gains = []; player.panners = [];
+    player.muted = []; player.volumes = []; player.pans = [];
+    player.solo = new Set();
+    player.offset = 0; player.duration = 0; player.name = '';
     const tracks = document.getElementById('tracks');
     tracks.innerHTML = '';
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Export current mix';
     document.getElementById('playbtn').disabled = true;
     document.getElementById('playbtn').innerHTML = '&#9654;';
     document.getElementById('seek').max = 0;
@@ -393,6 +388,7 @@
     const token = player.loadToken;
     const tracks = result.tracks || [];
     const note = document.getElementById('player-note');
+    player.name = result.name || 'mix';
     if (!tracks.length) {
       note.textContent = 'No stems available.';
       return;
@@ -405,8 +401,12 @@
       row.innerHTML = `<span class="tlabel">${t.label}</span>
         <button class="mute" title="Mute ${t.label}">M</button>
         <button class="solo" title="Play only ${t.label}">S</button>
-        <input type="range" min="0" max="1" step="0.01" value="1" title="${t.label} volume">
-        ${t.kept ? '<span class="badge">kept</span>' : ''}`;
+        <div class="fader vol"><input type="range" class="volrange" min="0" max="1" step="0.01" value="1" title="${t.label} volume"></div>
+        <div class="fader pan">
+          <span class="ptag">L</span>
+          <input type="range" class="panrange" min="-1" max="1" step="0.01" value="0" title="${t.label} pan (double-click to center)">
+          <span class="ptag">R</span>
+        </div>`;
       grid.appendChild(row);
       return row;
     });
@@ -436,24 +436,36 @@
 
     tracks.forEach((track, i) => {
       const gain = ctx.createGain();
-      gain.connect(player.master);
+      const panner = ctx.createStereoPanner();
+      gain.connect(panner);
+      panner.connect(player.master);
       player.gains[i] = gain;
+      player.panners[i] = panner;
       player.muted[i] = !track.kept;
       player.volumes[i] = 1;
+      player.pans[i] = 0;
       gain.gain.value = player.muted[i] ? 0 : 1;
+      panner.pan.value = 0;
 
       const row = rows[i];
       const muteBtn = row.querySelector('.mute');
       const soloBtn = row.querySelector('.solo');
-      const volume = row.querySelector('input[type=range]');
+      const volume = row.querySelector('.volrange');
+      const pan = row.querySelector('.panrange');
       muteBtn.classList.toggle('on', player.muted[i]);
       muteBtn.addEventListener('click', () => toggleMute(i));
       soloBtn.addEventListener('click', () => toggleSolo(i));
       volume.addEventListener('input', e => setVolume(i, parseFloat(e.target.value)));
+      pan.addEventListener('input', e => setPan(i, parseFloat(e.target.value)));
+      pan.addEventListener('dblclick', () => {
+        pan.value = 0;
+        setPan(i, 0);
+      });
     });
 
-    note.textContent = 'Play all stems together, mute or solo each one. Unkept stems start muted.';
+    note.textContent = 'Play, mute, solo or pan the stems, then export the current mix. Unkept stems start muted.';
     document.getElementById('playbtn').disabled = false;
+    exportBtn.disabled = false;
     document.getElementById('seek').max = player.duration;
     document.getElementById('durtime').textContent = fmtTime(player.duration);
   }
@@ -461,7 +473,8 @@
   function applyGain(i) {
     const gain = player.gains[i];
     if (!gain || !player.ctx) return;
-    const audible = player.solo !== null ? player.solo === i : !player.muted[i];
+    const soloed = player.solo.size > 0;
+    const audible = (soloed ? player.solo.has(i) : true) && !player.muted[i];
     gain.gain.setTargetAtTime(audible ? player.volumes[i] : 0, player.ctx.currentTime, 0.01);
   }
 
@@ -469,20 +482,19 @@
     const rows = document.getElementById('tracks').children;
     for (let i = 0; i < rows.length; i++) {
       rows[i].querySelector('.mute').classList.toggle('on', player.muted[i]);
-      rows[i].querySelector('.solo').classList.toggle('on', player.solo === i);
-      rows[i].classList.toggle('dimmed', player.solo !== null && player.solo !== i);
+      rows[i].querySelector('.solo').classList.toggle('on', player.solo.has(i));
+      rows[i].classList.toggle('dimmed', player.solo.size > 0 && !player.solo.has(i));
     }
   }
 
   function toggleMute(i) {
-    player.solo = null;
     player.muted[i] = !player.muted[i];
     player.gains.forEach((_, index) => applyGain(index));
     refreshTrackVisuals();
   }
 
   function toggleSolo(i) {
-    player.solo = player.solo === i ? null : i;
+    if (player.solo.has(i)) player.solo.delete(i); else player.solo.add(i);
     player.gains.forEach((_, index) => applyGain(index));
     refreshTrackVisuals();
   }
@@ -490,6 +502,90 @@
   function setVolume(i, value) {
     player.volumes[i] = value;
     applyGain(i);
+  }
+
+  function setPan(i, value) {
+    player.pans[i] = value;
+    const panner = player.panners[i];
+    if (panner && player.ctx) panner.pan.setTargetAtTime(value, player.ctx.currentTime, 0.01);
+  }
+
+  function encodeWav(buffer) {
+    const channels = buffer.numberOfChannels;
+    const length = buffer.length;
+    const sampleRate = buffer.sampleRate;
+    const blockAlign = channels * 2;
+    const dataSize = length * blockAlign;
+    const view = new DataView(new ArrayBuffer(44 + dataSize));
+    let offset = 0;
+    const writeText = text => {
+      for (let i = 0; i < text.length; i++) view.setUint8(offset++, text.charCodeAt(i));
+    };
+    writeText('RIFF');
+    view.setUint32(offset, 36 + dataSize, true); offset += 4;
+    writeText('WAVE');
+    writeText('fmt ');
+    view.setUint32(offset, 16, true); offset += 4;
+    view.setUint16(offset, 1, true); offset += 2;
+    view.setUint16(offset, channels, true); offset += 2;
+    view.setUint32(offset, sampleRate, true); offset += 4;
+    view.setUint32(offset, sampleRate * blockAlign, true); offset += 4;
+    view.setUint16(offset, blockAlign, true); offset += 2;
+    view.setUint16(offset, 16, true); offset += 2;
+    writeText('data');
+    view.setUint32(offset, dataSize, true); offset += 4;
+
+    const data = [];
+    for (let c = 0; c < channels; c++) data.push(buffer.getChannelData(c));
+    for (let i = 0; i < length; i++) {
+      for (let c = 0; c < channels; c++) {
+        const sample = Math.max(-1, Math.min(1, data[c][i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  async function exportCurrentMix() {
+    if (!player.buffers.length || !player.ctx) return;
+    const note = document.getElementById('player-note');
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Rendering…';
+    try {
+      const sampleRate = Math.max(...player.buffers.map(b => b.sampleRate));
+      const frames = Math.max(1, Math.ceil(player.duration * sampleRate));
+      const offline = new OfflineAudioContext(2, frames, sampleRate);
+      const soloed = player.solo.size > 0;
+      player.buffers.forEach((buffer, i) => {
+        const audible = (soloed ? player.solo.has(i) : true) && !player.muted[i] && player.volumes[i] > 0;
+        if (!audible) return;
+        const source = offline.createBufferSource();
+        source.buffer = buffer;
+        const gain = offline.createGain();
+        gain.gain.value = player.volumes[i];
+        const panner = offline.createStereoPanner();
+        panner.pan.value = player.pans[i];
+        source.connect(gain);
+        gain.connect(panner);
+        panner.connect(offline.destination);
+        source.start(0);
+      });
+      const rendered = await offline.startRendering();
+      const url = URL.createObjectURL(encodeWav(rendered));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${player.name} - mix.wav`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      note.textContent = 'Could not export the current mix.';
+    } finally {
+      exportBtn.textContent = 'Export current mix';
+      exportBtn.disabled = !player.buffers.length;
+    }
   }
 
   function playerPlay() {
@@ -546,6 +642,8 @@
   document.getElementById('playbtn').addEventListener('click', () => {
     if (player.playing) playerPause(); else playerPlay();
   });
+
+  exportBtn.addEventListener('click', exportCurrentMix);
 
   document.getElementById('seek').addEventListener('input', e => {
     player.offset = parseFloat(e.target.value) || 0;
