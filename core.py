@@ -14,7 +14,7 @@ from pathlib import Path
 import tempo
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_MODEL = "htdemucs_6s"
+DEFAULT_MODEL = "htdemucs"
 
 STEM_LABELS = {
     "vocals": "Vocals",
@@ -26,7 +26,6 @@ STEM_LABELS = {
 }
 
 MODELS = {
-    "htdemucs_6s": ["vocals", "drums", "bass", "guitar", "piano", "other"],
     "htdemucs": ["vocals", "drums", "bass", "other"],
 }
 

@@ -94,6 +94,8 @@
   }
   .playbtn:disabled { opacity: .4; cursor: default; }
   .transport input[type=range] { flex: 1; accent-color: var(--accent); }
+  .transport .mastervol { flex: 0 0 auto; width: 84px; accent-color: var(--accent-2); }
+  .transport .volicon { font-size: 14px; color: var(--muted); flex: 0 0 auto; }
   .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; min-width: 36px; text-align: center; }
   .track { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); margin-bottom: 6px; }
   .track .tlabel { flex: 0 0 72px; font-size: 14px; }
@@ -151,8 +153,7 @@
       <div>
         <label class="small">Model</label>
         <select id="model">
-          <option value="htdemucs_6s">6 stems (default)</option>
-          <option value="htdemucs">4 stems (fast)</option>
+          <option value="htdemucs">4 stems</option>
         </select>
       </div>
       <div>
@@ -198,6 +199,8 @@
         <span class="time" id="curtime">0:00</span>
         <input type="range" id="seek" min="0" max="0" step="0.01" value="0">
         <span class="time" id="durtime">0:00</span>
+        <span class="volicon" title="Overall volume (double-click to reset)">&#9835;</span>
+        <input type="range" class="mastervol" id="mastervol" min="0" max="1" step="0.01" value="1">
       </div>
       <div id="tracks"></div>
     </div>
@@ -220,6 +223,7 @@
   const modelSelect = document.getElementById('model');
   const goBtn = document.getElementById('go');
   const exportBtn = document.getElementById('exportmix');
+  const masterVol = document.getElementById('mastervol');
   let selectedFile = null;
   let timerHandle = null;
   let startTime = 0;
@@ -415,6 +419,7 @@
     player.ctx = ctx;
     player.master = ctx.createGain();
     player.master.connect(ctx.destination);
+    player.master.gain.value = parseFloat(masterVol.value);
 
     let buffers;
     try {
@@ -644,6 +649,19 @@
   });
 
   exportBtn.addEventListener('click', exportCurrentMix);
+
+  masterVol.addEventListener('input', () => {
+    if (player.master && player.ctx) {
+      player.master.gain.setTargetAtTime(parseFloat(masterVol.value), player.ctx.currentTime, 0.01);
+    }
+  });
+
+  masterVol.addEventListener('dblclick', () => {
+    masterVol.value = 1;
+    if (player.master && player.ctx) {
+      player.master.gain.setTargetAtTime(1, player.ctx.currentTime, 0.01);
+    }
+  });
 
   document.getElementById('seek').addEventListener('input', e => {
     player.offset = parseFloat(e.target.value) || 0;
